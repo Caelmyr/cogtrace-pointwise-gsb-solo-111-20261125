@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CogTrace · 齿盘核查台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='cogtrace.css') }}">
+  <script defer src="{{ url_for('static', filename='cogtrace.js') }}"></script>
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="/"><i aria-hidden="true"></i> CogTrace</a>
+  <span class="mast-label">齿盘核查台</span>
+  <a class="external" href="/prepare">照片准备 ↗</a>
+</header>
+<main>
+  <section class="introduction">
+    <div><h1>齿缘照片核查</h1><p>在齿盘正面原片上量取径向齿缘，保留盘心、方向和真实像素依据。</p></div>
+    <div class="top-actions">
+      <button id="practice" class="primary" type="button">打开练习齿盘</button>
+      <button id="open-import" type="button">导入原片</button>
+    </div>
+  </section>
+  <p id="notice" class="notice" role="status" hidden></p>
+  <section class="library">
+    <label for="library">核查卡</label>
+    <select id="library"><option value="">选取已存卡片</option></select>
+    <span id="origin"></span>
+  </section>
+  <section id="empty" class="empty">
+    <div class="empty-cog" aria-hidden="true"><i></i></div>
+    <h2>选择一张齿盘照片</h2>
+    <p>使用正对盘面的照片，浅底上的齿缘更容易核对。</p>
+  </section>
+  <section id="workspace" class="workspace" hidden>
+    <div class="left">
+      <section class="panel source">
+        <div class="panel-head">
+          <div><h2 id="card-title">原片</h2><span id="dimensions"></span></div>
+          <div class="modes" role="group" aria-label="原片方向模式">
+            <button id="probe-mode" data-mode="probe" aria-pressed="true" type="button">点读</button>
+            <button id="mark-mode" data-mode="mark" aria-pressed="false" type="button">选方向</button>
+          </div>
+        </div>
+        <div class="camera"><canvas id="capture" aria-label="齿盘原片，可点击取样或输入原片像素坐标"></canvas></div>
+        <div class="probe">
+          <b>原片点读</b>
+          <form id="probe-form"><label>X <input id="probe-x" type="number" min="0" step="1" required></label>
+            <label>Y <input id="probe-y" type="number" min="0" step="1" required></label>
+            <button type="submit">读取</button></form>
+          <span id="probe-result">选择原片像素</span>
+        </div>
+      </section>
+      <section class="panel profile">
+        <div class="panel-head">
+          <div><h2 id="chart-title">周向齿缘</h2><span id="chart-caption">环带内最外实测暗像素 · °</span></div>
+          <div class="modes" role="group" aria-label="齿缘图表">
+            <button data-chart="sweep" aria-pressed="true" type="button">一圈半径</button>
+            <button data-chart="ray" aria-pressed="false" type="button">当前径线</button>
+          </div>
+        </div>
+        <canvas id="chart" width="850" height="166" aria-label="一圈齿缘或当前径线剖面"></canvas>
+      </section>
+    </div>
+    <aside class="right">
+      <section class="panel readout">
+        <div class="panel-head"><h2>当前齿缘半径</h2><span id="measurement-state"></span></div>
+        <div class="volume"><strong id="edge-radius">—</strong><span id="radius-detail"></span></div>
+        <p id="selected-level"></p>
+      </section>
+      <form id="calibration" class="panel settings">
+        <div class="panel-head"><div><h2>齿盘标定</h2><span>向右为 0°，从上方看画面顺时针增加</span></div></div>
+        <label class="wide">卡片名称<input id="name" maxlength="80" required></label>
+        <fieldset><legend>原片坐标 · px</legend><div class="form-grid">
+          <label>盘心 X<input data-setting="cx" type="number" step="any" min="0" required></label>
+          <label>盘心 Y<input data-setting="cy" type="number" step="any" min="0" required></label>
+          <label>内环半径<input data-setting="inner" type="number" step="1" min="2" required></label>
+          <label>外环半径<input data-setting="outer" type="number" step="1" min="4" required></label>
+        </div></fieldset>
+        <fieldset><legend>读数参数</legend><div class="form-grid">
+          <label>核查角度 °<input data-setting="angle" type="number" step="any" min="0" max="360" required></label>
+          <label>手填齿数<input data-setting="teeth" type="number" step="1" min="6" max="120" required></label>
+          <label>金属亮度上限<input data-setting="cutoff" type="number" step="1" min="1" max="254" required></label>
+        </div></fieldset>
+        <button id="save" class="primary" type="submit">保存并核查</button>
+      </form>
+      <section class="panel outputs">
+        <div class="panel-head"><h2>齿缘交接</h2></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 核查卡 ↓</a></div>
+        <button id="prepare" type="button">将原片送入照片准备 ↗</button>
+      </section>
+    </aside>
+  </section>
+</main>
+<dialog id="import">
+  <form id="upload">
+    <h2>导入齿盘原片</h2>
+    <label>核查卡名称<input name="name" maxlength="80" required></label>
+    <label>照片<input name="photo" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff" required></label>
+    <p id="import-notice" role="status"></p>
+    <div class="top-actions"><button id="cancel-import" type="button">取消</button><button class="primary" type="submit">建立核查卡</button></div>
+  </form>
+</dialog>
+</body>
+</html>

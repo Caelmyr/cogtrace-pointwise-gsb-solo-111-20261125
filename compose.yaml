@@ -1,0 +1,16 @@
+name: solo114-cogtrace
+services:
+  desk:
+    build:
+      context: .
+      args:
+        COGTRACE_DEPS_IMAGE: ${COGTRACE_DEPS_IMAGE:-python:3.11-slim}
+    image: ${COGTRACE_IMAGE:-solo114-cogtrace:1.0}
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:${COGTRACE_PORT:-19914}:8000"
+    volumes:
+      - measurements:/var/lib/cogtrace
+    init: true
+volumes:
+  measurements:
