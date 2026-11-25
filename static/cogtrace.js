@@ -1,7 +1,7 @@
 "use strict";
 
 const get = (id) => document.getElementById(id);
-const state = {card: null, result: null, photo: null, probe: null, mode: "probe", chart: "sweep", busy: false};
+const state = {card: null, result: null, photo: null, probe: null, bore: null, mode: "probe", chart: "sweep", busy: false};
 const settings = [...document.querySelectorAll("[data-setting]")];
 
 async function api(path, options) {
@@ -84,6 +84,71 @@ function paintSource() {
     ctx.strokeStyle = "#132637";
     ctx.strokeRect(probe.x - 5, probe.y - 5, 10, 10);
   }
+  paintCompass(ctx);
+}
+
+function drawCross(ctx, x, y, color, arm) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1.5, ctx.canvas.width / 480);
+  ctx.beginPath();
+  ctx.moveTo(x - arm, y); ctx.lineTo(x + arm, y);
+  ctx.moveTo(x, y - arm); ctx.lineTo(x, y + arm);
+  ctx.stroke();
+}
+
+function drawWallDot(ctx, x, y, color, outline) {
+  const radius = Math.max(3.2, ctx.canvas.width / 170);
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, 2 * Math.PI);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = outline;
+  ctx.stroke();
+}
+
+function paintCompass(ctx) {
+  const {card, result, bore} = state;
+  if (!card) return;
+  const adopted = result?.compass || (card.compass ? bore?.adopted || card.compass : null);
+  const recommended = bore?.recommended;
+  const line = Math.max(1.6, card.width / 430);
+
+  if (!adopted && recommended) {
+    ctx.save();
+    ctx.strokeStyle = "#e0443e";
+    ctx.setLineDash([9, 6]);
+    ctx.lineWidth = line;
+    ctx.beginPath();
+    ctx.arc(recommended.gx, recommended.gy, recommended.radius, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    drawCross(ctx, recommended.gx, recommended.gy, "#e0443e", 8);
+    ctx.restore();
+    for (const point of bore.wall_points || []) drawWallDot(ctx, point.x, point.y, "rgba(255,45,85,.55)", "#ffffff");
+  }
+
+  if (!adopted) return;
+  const {gx, gy, radius} = adopted;
+  ctx.save();
+  ctx.strokeStyle = "#ff3b3b";
+  ctx.lineWidth = line + 0.6;
+  ctx.beginPath();
+  ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
+  ctx.stroke();
+  ctx.restore();
+  drawCross(ctx, gx, gy, "#ff3b3b", 9);
+  for (const point of adopted.wall_points || []) drawWallDot(ctx, point.x, point.y, "#ff2d55", "#ffffff");
+  const wall = adopted.direction?.wall;
+  if (wall) {
+    ctx.strokeStyle = "#22c7da";
+    ctx.lineWidth = Math.max(1.2, line * 0.75);
+    ctx.beginPath();
+    ctx.moveTo(gx, gy);
+    ctx.lineTo(wall.x, wall.y);
+    ctx.stroke();
+    drawWallDot(ctx, wall.x, wall.y, "#22c7da", "#06323a");
+  }
 }
 
 function paintChart() {
@@ -154,6 +219,117 @@ function pointLabel(point) {
     point.radius.toFixed(1) + " px · " + point.brightness.toFixed(1);
 }
 
+const REVIEW_TEXT = {
+  image_edge: "连通开口一直延到图边（图外），不像闭合通孔，请复核裁切/盘心。",
+  inner_edge: "连通开口碰到内环边，内环以内没看到完整孔壁，不像闭合通孔，请复核内环半径。",
+  seed_not_opening: "已填盘心所在像素不是亮开口，无法从该点起填，请复核盘心或金属亮度上限。",
+};
+
+function setText(id, text) {
+  const node = get(id);
+  if (node) node.textContent = text;
+}
+
+function renderMargin() {
+  const row = get("compass-margin-row");
+  if (!row) return;
+  const compass = state.result?.compass;
+  row.classList.remove("idle", "blank", "warn");
+  if (!compass) {
+    row.classList.add("idle");
+    row.textContent = "采用中心通孔圆规后，此处按同一核查角度给出规边到实际孔壁的余量；没见到孔壁则留空。";
+    return;
+  }
+  const direction = compass.direction || {};
+  const wall = direction.wall;
+  if (wall && direction.margin !== null && direction.margin !== undefined) {
+    row.innerHTML = "";
+    row.append("同一角度规边余量 ");
+    const value = document.createElement("b");
+    value.id = "compass-margin-value";
+    value.textContent = Number(direction.margin).toFixed(2) + " px";
+    row.append(value);
+    row.append(" → 实测孔壁 (" + wall.x + ", " + wall.y + ")");
+    return;
+  }
+  row.classList.add("blank");
+  row.innerHTML = '同一角度规边余量 <b id="compass-margin-value" aria-label="留空"></b>';
+  const detail = document.createElement("span");
+  detail.className = "margin-blank";
+  detail.textContent = "该方向（" + Number(direction.angle ?? state.result.angle).toFixed(2) +
+    "°）没见到孔壁（" + (direction.reason === "image_edge" ? "延到图外" :
+      direction.reason === "inner_edge" ? "内环边内无金属" : "未见金属") + "），余量留空。";
+  row.append(detail);
+}
+
+function renderBore() {
+  const bore = state.bore;
+  const adopted = state.card?.compass || null;
+  const adoptButton = get("adopt-compass");
+  const clearButton = get("clear-compass");
+  const status = get("compass-status");
+  if (!bore) {
+    if (adoptButton) adoptButton.disabled = true;
+    renderMargin();
+    return;
+  }
+  const rec = bore.recommended;
+  setText("bore-limit", bore.max_offset);
+  const review = get("bore-review");
+  if (bore.review && (bore.reasons || []).length) {
+    review.hidden = false;
+    review.textContent = "提示复核：" + bore.reasons.map((key) => REVIEW_TEXT[key] || key).join(" ");
+  } else {
+    review.hidden = true;
+    review.textContent = "";
+  }
+
+  if (!rec) {
+    setText("bore-diameter", "无法拟合");
+    setText("bore-radius", "盘心起点不是开口");
+    setText("bore-center", "—");
+    setText("bore-offset", "");
+    setText("bore-tight", "—");
+    setText("bore-tight-detail", "");
+    if (adoptButton) adoptButton.disabled = true;
+  } else {
+    setText("bore-diameter", rec.diameter + " px");
+    setText("bore-radius", "半径 " + rec.radius + " px · 盘心到最近实测金属 " +
+      rec.clearance + " px（实测口径约 " + (2 * rec.clearance) + " px）");
+    setText("bore-center", "(" + rec.gx + ", " + rec.gy + ")");
+    setText("bore-offset", "偏离当前盘心 " + rec.offset + " / 上限 " + bore.max_offset + " px");
+    const tight = bore.tightest;
+    if (tight) {
+      setText("bore-tight", "(" + tight.x + ", " + tight.y + ")");
+      setText("bore-tight-detail", "距规心 " + tight.distance + " px · 余量 " +
+        tight.margin + " px · " + tight.angle + "°");
+    }
+    setText("bore-component", bore.component_pixels + " px");
+    setText("bore-excluded", "螺栓孔等 " + bore.excluded_components + " 组 / " +
+      bore.excluded_pixels + " px 开口未并入");
+    if (adoptButton) adoptButton.disabled = false;
+  }
+
+  if (adopted) {
+    const marks = bore.adopted || {};
+    adoptButton.hidden = true;
+    clearButton.hidden = false;
+    status.hidden = false;
+    status.classList.toggle("warn", marks.fits_current_metal === false || marks.within_center_limit === false);
+    status.textContent = marks.fits_current_metal === false ?
+      "已采用 (" + adopted.gx + ", " + adopted.gy + ") · D " + adopted.diameter +
+      " px，但当前标定下会碰到金属，请复核（原盘心/外缘读数未改）。" :
+      "已采用规心 (" + adopted.gx + ", " + adopted.gy + ") · 直径 " + adopted.diameter +
+      " px；原盘心与外缘读数保持不变，重开卡片仍保留。";
+  } else {
+    adoptButton.hidden = false;
+    clearButton.hidden = true;
+    status.hidden = true;
+    status.textContent = "";
+  }
+  renderMargin();
+}
+
 function show() {
   const {card, result} = state;
   get("workspace").hidden = false;
@@ -177,6 +353,7 @@ function show() {
   for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
     get(id).href = "/cogtrace" + route("/export/" + filename) + savedQuery();
   }
+  renderBore();
   paintSource();
   paintChart();
 }
@@ -185,8 +362,12 @@ async function open(card) {
   const base = "/cards/" + card.id;
   const photo = new Image();
   photo.src = "/cogtrace" + base + "/capture.png";
-  const [result] = await Promise.all([api(base + "/measurement?revision=" + card.revision), photo.decode()]);
-  Object.assign(state, {card, result, photo, probe: null});
+  const [result, bore] = await Promise.all([
+    api(base + "/measurement?revision=" + card.revision),
+    api(base + "/bore?revision=" + card.revision).catch(() => null),
+    photo.decode(),
+  ]);
+  Object.assign(state, {card, result, photo, bore, probe: null});
   get("library").value = card.id;
   show();
 }
@@ -197,6 +378,20 @@ async function probe(x, y) {
   get("probe-y").value = y;
   get("probe-result").textContent = pointLabel(state.probe);
   paintSource();
+}
+
+async function liveCompassRay(angle) {
+  if (!state.card?.compass || angle === "" || !Number.isFinite(Number(angle))) return;
+  try {
+    const ray = await api(route("/compass/ray") + savedQuery() + "&angle=" + encodeURIComponent(angle));
+    if (state.result?.compass) {
+      state.result.compass.direction = ray;
+      renderMargin();
+      paintSource();
+    }
+  } catch (error) {
+    // The saved measurement still refreshes after “保存并核查”.
+  }
 }
 
 get("practice").addEventListener("click", () => action(async () => {
@@ -236,11 +431,15 @@ get("capture").addEventListener("click", (event) => {
   action(async () => {
     await probe(x, y);
     if (state.mode === "mark") {
-      settings.find((field) => field.dataset.setting === "angle").value = state.probe.angle.toFixed(3);
+      const angle = state.probe.angle.toFixed(3);
+      settings.find((field) => field.dataset.setting === "angle").value = angle;
       notice("已填入原片方向，保存后更新齿缘和校样。");
+      await liveCompassRay(angle);
     }
   });
 });
+const angleField = settings.find((field) => field.dataset.setting === "angle");
+if (angleField) angleField.addEventListener("change", () => liveCompassRay(angleField.value));
 get("probe-form").addEventListener("submit", (event) => {
   event.preventDefault();
   action(() => probe(get("probe-x").value, get("probe-y").value));
@@ -260,6 +459,24 @@ get("calibration").addEventListener("submit", (event) => {
 get("prepare").addEventListener("click", () => action(async () => {
   const {url} = await api(route("/prepare") + savedQuery(), {method: "POST"});
   location.assign(url);
+}));
+get("adopt-compass").addEventListener("click", () => action(async () => {
+  const card = await api(route("/compass/adopt"), {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({revision: state.card.revision}),
+  });
+  await open(card);
+  notice("已采用推荐圆规；原盘心与外缘读数保持不变。");
+}));
+get("clear-compass").addEventListener("click", () => action(async () => {
+  const card = await api(route("/compass/clear"), {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({revision: state.card.revision}),
+  });
+  await open(card);
+  notice("已取消采用圆规。");
 }));
 document.querySelectorAll("[data-chart]").forEach((button) => button.addEventListener("click", () => {
   state.chart = button.dataset.chart;

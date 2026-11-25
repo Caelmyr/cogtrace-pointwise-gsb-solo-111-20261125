@@ -67,6 +67,43 @@
         <div class="panel-head"><h2>当前齿缘半径</h2><span id="measurement-state"></span></div>
         <div class="volume"><strong id="edge-radius">—</strong><span id="radius-detail"></span></div>
         <p id="selected-level"></p>
+        <p id="compass-margin-row" class="compass-margin idle">采用中心通孔圆规后，此处按同一核查角度给出规边到实际孔壁的余量；没见到孔壁则留空。</p>
+      </section>
+      <section class="panel bore" id="bore-panel">
+        <div class="panel-head">
+          <div><h2>中心通孔 · 可放圆规</h2><span>已填盘心像素起步 · 内环内按亮度四向连回</span></div>
+        </div>
+        <div class="bore-body">
+          <p id="bore-review" class="bore-review" role="alert" hidden></p>
+          <div class="bore-grid">
+            <div class="bore-metric diameter">
+              <span>可放圆规直径</span>
+              <strong id="bore-diameter">—</strong>
+              <em id="bore-radius"></em>
+            </div>
+            <div class="bore-metric">
+              <span>推荐规心（偏移上限 <b id="bore-limit">—</b> px）</span>
+              <strong id="bore-center">—</strong>
+              <em id="bore-offset"></em>
+            </div>
+            <div class="bore-metric">
+              <span>最紧处 · 实测孔壁点</span>
+              <strong id="bore-tight">—</strong>
+              <em id="bore-tight-detail"></em>
+            </div>
+            <div class="bore-metric">
+              <span>连回起点的开口</span>
+              <strong id="bore-component">—</strong>
+              <em id="bore-excluded"></em>
+            </div>
+          </div>
+          <p id="bore-note" class="bore-note">只统计上下左右能连回盘心像素的亮开口，螺栓孔等独立亮区不并入；规心偏移不得超过内环半径 1/10，推荐按「净空 − 0.25×偏移 px」兼顾直径与居中。</p>
+          <p id="compass-status" class="compass-status" hidden></p>
+          <div class="bore-actions">
+            <button id="adopt-compass" class="primary" type="button">采用推荐圆规</button>
+            <button id="clear-compass" type="button" hidden>取消采用</button>
+          </div>
+        </div>
       </section>
       <form id="calibration" class="panel settings">
         <div class="panel-head"><div><h2>齿盘标定</h2><span>向右为 0°，从上方看画面顺时针增加</span></div></div>

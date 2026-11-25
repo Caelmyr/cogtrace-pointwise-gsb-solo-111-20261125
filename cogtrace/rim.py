@@ -132,3 +132,26 @@ def practice():
     draw.text((34, 64), "CHAINRING / FACE A", fill="#465151", font=ImageFont.load_default(size=15))
     draw.text((34, 408), "SIMULATED INSPECTION PHOTO", fill="#596764", font=ImageFont.load_default(size=11))
     return photo.size, png(photo), cfg
+
+
+# Lazy aliases so callers can reach the center-hole compass helpers from
+# either :mod:`cogtrace.rim` or :mod:`cogtrace.bore` without an import cycle.
+_BORE_ALIASES = {
+    "bore_report": ("cogtrace.bore", "inspect"),
+    "hole_report": ("cogtrace.bore", "inspect"),
+    "center_hole": ("cogtrace.bore", "inspect"),
+    "compass_report": ("cogtrace.bore", "inspect"),
+    "recommend_compass": ("cogtrace.bore", "inspect"),
+    "fit_compass": ("cogtrace.bore", "resolve_adoption"),
+    "adopt_compass": ("cogtrace.bore", "resolve_adoption"),
+    "hole_segment": ("cogtrace.bore", "segment"),
+    "directional_wall": ("cogtrace.bore", "directional_wall"),
+}
+
+
+def __getattr__(name):
+    if name in _BORE_ALIASES:
+        from importlib import import_module
+        module_name, attr = _BORE_ALIASES[name]
+        return getattr(import_module(module_name), attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

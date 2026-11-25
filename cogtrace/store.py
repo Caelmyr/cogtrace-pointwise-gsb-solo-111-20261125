@@ -73,5 +73,17 @@ class Cards:
             self.commit(self.folder(key), card)
             return card
 
+    def save_compass(self, key, compass, revision=None):
+        """Persist the adopted compass separately from the disk-center settings."""
+        with self.lock:
+            card = self.read(key, revision)
+            if compass is None:
+                card.pop("compass", None)
+            else:
+                card["compass"] = dict(compass)
+            card["revision"] = card["revision"] + 1
+            self.commit(self.folder(key), card)
+            return card
+
     def photo(self, key):
         return self.folder(key) / "capture.png"
