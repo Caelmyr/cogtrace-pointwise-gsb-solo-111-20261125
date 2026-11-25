@@ -66,6 +66,7 @@ function paintSource() {
     ctx.stroke();
   }
   ctx.setLineDash([]);
+  paintToothEvidence(ctx, cfg);
   const angle = state.result.angle * Math.PI / 180;
   ctx.strokeStyle = "#bb6622";
   ctx.lineWidth = 2;
@@ -133,6 +134,13 @@ function paintChart() {
   }
   ctx.stroke();
   if (sweep) {
+    for (const tooth of result.teeth || []) {
+      if (!tooth.has_evidence || tooth.source_angle === null || tooth.radius === null) continue;
+      ctx.fillStyle = "#2f7f9b";
+      ctx.beginPath();
+      ctx.arc(xAt(tooth.source_angle), yAt(tooth.radius), 3.2, 0, 2 * Math.PI);
+      ctx.fill();
+    }
     ctx.strokeStyle = "#bd6622";
     ctx.beginPath();
     ctx.moveTo(xAt(Math.min(result.angle, 359)), yAt(yMin));
@@ -146,6 +154,131 @@ function paintChart() {
     ctx.lineTo(xAt(xMax), yAt(cfg.cutoff));
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+}
+
+function toothForDirection(angle) {
+  const teeth = state.result?.teeth;
+  const anchor = state.card?.settings?.first_tooth_angle;
+  if (!teeth?.length || anchor === null || anchor === undefined || !Number.isFinite(Number(angle))) return null;
+  const pitch = 360 / teeth.length;
+  let clockwise = (Number(angle) - Number(anchor)) % 360;
+  if (clockwise < 0) clockwise += 360;
+  const index = Math.floor(clockwise / pitch + 0.5) % teeth.length;
+  return teeth[index];
+}
+
+function updateToothReadout(angle = state.directionAngle ?? state.result?.angle) {
+  const element = get("tooth-position");
+  if (!element || !state.result) return;
+  const anchor = state.card?.settings?.first_tooth_angle;
+  if (anchor === null || anchor === undefined) {
+    element.textContent = "采用一号齿后，这里显示当前方向对应的齿位号。";
+    element.dataset.adopted = "false";
+    delete element.dataset.toothIndex;
+    delete element.dataset.state;
+    return;
+  }
+  const tooth = toothForDirection(angle);
+  if (!tooth) {
+    element.textContent = "已采用一号齿，但暂时无法计算齿位号。";
+    element.dataset.adopted = "true";
+    delete element.dataset.toothIndex;
+    delete element.dataset.state;
+    return;
+  }
+  element.dataset.adopted = "true";
+  element.dataset.toothIndex = String(tooth.index);
+  element.dataset.tooth = String(tooth.index);
+  element.dataset.state = tooth.state || tooth.status;
+  element.dataset.status = tooth.status;
+  if (tooth.has_evidence && tooth.evidence) {
+    element.textContent = `当前方向齿位号：第 ${tooth.index} 齿 · 实见证据 · 源角 ${tooth.source_angle.toFixed(2)}° · r=${tooth.radius} px`;
+  } else {
+    element.textContent = `当前方向齿位号：第 ${tooth.index} 齿 · 缺证（保留编号，无实测源点）`;
+  }
+  document.querySelectorAll(".tooth-item").forEach((item) => {
+    item.dataset.current = String(Number(item.dataset.toothIndex) === tooth.index);
+  });
+}
+
+function renderTeeth() {
+  const list = get("tooth-list");
+  const anchorState = get("anchor-state");
+  const summary = get("tooth-summary");
+  const anchor = state.card?.settings?.first_tooth_angle;
+  const teeth = state.result?.teeth || [];
+  list.replaceChildren();
+
+  if (anchor === null || anchor === undefined || !teeth.length) {
+    anchorState.textContent = "尚未采用一号齿";
+    summary.textContent = "";
+    list.hidden = true;
+    updateToothReadout();
+    return;
+  }
+
+  anchorState.textContent = `一号齿方向 ${Number(anchor).toFixed(3)}° · 顺时针编号`;
+  const seen = state.result.seen_count ?? teeth.filter((tooth) => tooth.has_evidence).length;
+  summary.textContent = `已配实证 ${seen} / ${teeth.length} · 缺证 ${teeth.length - seen}`;
+  list.hidden = false;
+  const fragment = document.createDocumentFragment();
+  for (const tooth of teeth) {
+    const item = document.createElement("li");
+    item.className = `tooth tooth-item is-${tooth.state || tooth.status} ${tooth.has_evidence ? "seen matched evidence-seen has-evidence" : "missing evidence-missing no-evidence"}`;
+    item.dataset.toothIndex = String(tooth.index);
+    item.dataset.toothNumber = String(tooth.index);
+    item.dataset.tooth = String(tooth.index);
+    item.dataset.index = String(tooth.index);
+    item.dataset.state = tooth.state || tooth.status;
+    item.dataset.status = tooth.status;
+    item.dataset.matchStatus = tooth.match_status || (tooth.matched ? "matched" : "missing");
+    item.dataset.evidence = String(Boolean(tooth.has_evidence));
+    item.id = `tooth-${tooth.index}`;
+    item.setAttribute("aria-label", `齿位 ${tooth.index}，${tooth.has_evidence ? "实见证据" : "缺证"}`);
+
+    const number = document.createElement("span");
+    number.className = "tooth-number";
+    number.textContent = `第 ${tooth.index} 齿`;
+    const status = document.createElement("span");
+    status.className = "tooth-status";
+    status.textContent = tooth.has_evidence ? "实见" : "缺证";
+    const detail = document.createElement("span");
+    detail.className = "tooth-detail";
+    if (tooth.has_evidence) {
+      detail.textContent = `源角 ${tooth.source_angle.toFixed(2)}° · r=${tooth.radius} · ${tooth.x},${tooth.y}`;
+    } else {
+      detail.textContent = "仅保留编号与状态";
+    }
+    item.append(number, status, detail);
+    fragment.append(item);
+  }
+  list.append(fragment);
+  updateToothReadout();
+}
+
+function paintToothEvidence(ctx, cfg) {
+  const teeth = state.result?.teeth || [];
+  if (!teeth.length) return;
+  const current = toothForDirection(state.directionAngle ?? state.result.angle);
+  ctx.font = `${Math.max(11, Math.round(state.card.width / 58))}px monospace`;
+  for (const tooth of teeth) {
+    const evidence = tooth.evidence;
+    if (!evidence || evidence.x === null || evidence.y === null) continue;
+    const isCurrent = current?.index === tooth.index;
+    const radians = (evidence.source_angle ?? evidence.angle) * Math.PI / 180;
+    ctx.beginPath();
+    ctx.moveTo(cfg.cx, cfg.cy);
+    ctx.lineTo(cfg.cx + cfg.outer * Math.cos(radians), cfg.cy + cfg.outer * Math.sin(radians));
+    ctx.strokeStyle = isCurrent ? "#0f668d" : "rgba(47, 127, 155, .42)";
+    ctx.lineWidth = isCurrent ? 3 : 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(evidence.x, evidence.y, isCurrent ? 5 : 3, 0, 2 * Math.PI);
+    ctx.fillStyle = isCurrent ? "#0f668d" : "#2f7f9b";
+    ctx.fill();
+    ctx.fillStyle = "#174b61";
+    ctx.fillText(String(tooth.index), evidence.x + 6, Math.max(12, evidence.y - 6));
   }
 }
 
@@ -174,9 +307,11 @@ function show() {
   get("measurement-state").textContent = result.angle.toFixed(2) + "°";
   get("selected-level").textContent = (edge ? "实际源点 (" + edge.x + ", " + edge.y + ") · " : "") +
     "手填齿距 " + result.manual_pitch_deg.toFixed(2) + "°";
-  for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", zip: "observation.zip"})) {
+  for (const [id, filename] of Object.entries({proof: "proof.png", csv: "profile.csv", "teeth-csv": "teeth.csv", zip: "observation.zip"})) {
     get(id).href = "/cogtrace" + route("/export/" + filename) + savedQuery();
   }
+  state.directionAngle = state.probe?.angle ?? result.angle;
+  renderTeeth();
   paintSource();
   paintChart();
 }
@@ -187,15 +322,18 @@ async function open(card) {
   photo.src = "/cogtrace" + base + "/capture.png";
   const [result] = await Promise.all([api(base + "/measurement?revision=" + card.revision), photo.decode()]);
   Object.assign(state, {card, result, photo, probe: null});
+  try { localStorage.setItem("cogtrace:lastCard", card.id); } catch (_) { /* storage is optional */ }
   get("library").value = card.id;
   show();
 }
 
 async function probe(x, y) {
   state.probe = await api(route("/probe") + savedQuery() + "&x=" + x + "&y=" + y);
+  state.directionAngle = state.probe.angle;
   get("probe-x").value = x;
   get("probe-y").value = y;
   get("probe-result").textContent = pointLabel(state.probe);
+  updateToothReadout(state.probe.angle);
   paintSource();
 }
 
@@ -257,6 +395,35 @@ get("calibration").addEventListener("submit", (event) => {
     await library();
   });
 });
+get("adopt-tooth").addEventListener("click", () => action(async () => {
+  const angleField = settings.find((field) => field.dataset.setting === "angle");
+  if (angleField.value.trim() === "") throw new Error("请先填写有效的核查角度，或使用「选方向」点选实见齿尖。");
+  const selectedAngle = Number(angleField.value);
+  if (!Number.isFinite(selectedAngle)) throw new Error("请先填写有效的核查角度，或使用「选方向」点选实见齿尖。");
+  const firstToothAngle = ((selectedAngle % 360) + 360) % 360;
+  const fields = Object.fromEntries(settings.map((field) => [field.dataset.setting, Number(field.value)]));
+  fields.angle = firstToothAngle;
+  fields.first_tooth_angle = firstToothAngle;
+  const card = await api(route(""), {
+    method: "PATCH",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      revision: state.card.revision,
+      name: get("name").value,
+      settings: fields,
+    }),
+  });
+  await open(card);
+  await library();
+  notice(`已采用 ${firstToothAngle.toFixed(3)}° 方向为一号齿；之后修改核查角度不会移动编号。`);
+}));
+settings.find((field) => field.dataset.setting === "angle").addEventListener("input", (event) => {
+  const angle = Number(event.currentTarget.value);
+  if (!state.card || !Number.isFinite(angle)) return;
+  state.directionAngle = ((angle % 360) + 360) % 360;
+  updateToothReadout(state.directionAngle);
+  paintSource();
+});
 get("prepare").addEventListener("click", () => action(async () => {
   const {url} = await api(route("/prepare") + savedQuery(), {method: "POST"});
   location.assign(url);
@@ -267,4 +434,15 @@ document.querySelectorAll("[data-chart]").forEach((button) => button.addEventLis
     item.setAttribute("aria-pressed", String(item === button)));
   if (state.card) paintChart();
 }));
-action(library);
+action(async () => {
+  await library();
+  let lastCard = null;
+  try { lastCard = localStorage.getItem("cogtrace:lastCard"); } catch (_) { /* optional */ }
+  if (lastCard && Array.from(get("library").options).some((option) => option.value === lastCard)) {
+    try {
+      await open(await api("/cards/" + lastCard));
+    } catch (_) {
+      try { localStorage.removeItem("cogtrace:lastCard"); } catch (__) { /* optional */ }
+    }
+  }
+});

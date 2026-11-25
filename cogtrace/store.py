@@ -67,6 +67,12 @@ class Cards:
         with self.lock:
             card = self.read(key, integer(value.get("revision"), "工作版本", 1))
             incoming = object_value(value.get("settings", {}), "齿缘设置")
+            anchor_keys = ("first_tooth_angle", "anchor_angle", "tooth_one_angle",
+                           "number_one_angle", "adopted_angle", "anchor")
+            if any(anchor_key in incoming for anchor_key in anchor_keys):
+                # Normalise aliases before merging so an old canonical value
+                # cannot take precedence over a newly posted anchor alias.
+                incoming = {**incoming, "first_tooth_angle": rim.anchor_setting(incoming)}
             config = rim.settings({**card["settings"], **incoming}, (card["width"], card["height"]))
             card.update(name=text(value.get("name", card["name"]), "核查卡名称", 80, False),
                         settings=config, revision=card["revision"] + 1)

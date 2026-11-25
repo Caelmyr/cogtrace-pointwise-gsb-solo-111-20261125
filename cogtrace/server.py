@@ -42,17 +42,45 @@ def create_app(directory=None):
         if not upload or not upload.filename:
             raise Invalid("请选择齿盘原片")
         size, image = rim.decode(upload.stream.read(rim.MAX_IMAGE_BYTES + 1))
-        return jsonify(cards.create(request.form.get("name", ""), Path(upload.filename).name[:140],
-                                    size, image, rim.defaults(size))), 201
+        saved = cards.create(request.form.get("name", ""), Path(upload.filename).name[:140],
+                             size, image, rim.defaults(size))
+        return jsonify(rim.public_card(saved)), 201
 
     @api.post("/practice")
     def practice():
-        return jsonify(cards.demo()), 201
+        return jsonify(rim.public_card(cards.demo())), 201
 
     @api.route("/cards/<key>", methods=["GET", "PATCH"])
     def card(key):
-        return jsonify(cards.update(key, object_value(request.get_json(silent=True), "核查卡设置"))
-                       if request.method == "PATCH" else cards.read(key))
+        if request.method == "PATCH":
+            body = object_value(request.get_json(silent=True), "核查卡设置")
+            value = dict(body)
+            settings_in = dict(object_value(value.get("settings", {}), "齿缘设置"))
+            # Also accept adoption fields posted at the top level.
+            for alias in ("first_tooth_angle", "anchor_angle", "tooth_one_angle",
+                          "number_one_angle", "adopted_angle", "anchor"):
+                if alias in value and alias not in settings_in:
+                    settings_in[alias] = value[alias]
+            value["settings"] = settings_in
+            saved = cards.update(key, value)
+        else:
+            saved = cards.read(key)
+        return jsonify(rim.public_card(saved))
+
+    @api.post("/cards/<key>/adopt")
+    @api.post("/cards/<key>/adopt-tooth")
+    @api.post("/cards/<key>/anchor")
+    def adopt_tooth(key):
+        body = object_value(request.get_json(silent=True) or {}, "采用参数")
+        current = cards.read(key, body.get("revision"))
+        angle = body.get("angle", body.get("first_tooth_angle", body.get("anchor_angle")))
+        if angle is None:
+            angle = current["settings"].get("angle")
+        saved = cards.update(key, {
+            "revision": current["revision"],
+            "settings": {"first_tooth_angle": angle},
+        })
+        return jsonify(rim.public_card(saved))
 
     @api.get("/cards/<key>/capture.png")
     def capture(key):
@@ -79,6 +107,11 @@ def create_app(directory=None):
     def profile(key):
         _, _, result = measurement(key)
         return download(exports.trace_table(result), "text/csv", "radial-profile.csv")
+
+    @api.get("/cards/<key>/export/teeth.csv")
+    def teeth_csv(key):
+        _, _, result = measurement(key)
+        return download(exports.teeth_table(result), "text/csv", "tooth-evidence.csv")
 
     @api.get("/cards/<key>/export/proof.png")
     def proof(key):
