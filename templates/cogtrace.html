@@ -61,12 +61,54 @@
         </div>
         <canvas id="chart" width="850" height="166" aria-label="一圈齿缘或当前径线剖面"></canvas>
       </section>
+      <section class="panel compare-panel" id="compare-panel" aria-label="两枚齿对照">
+        <div class="panel-head">
+          <div>
+            <h2>双齿对照 · 完好齿 / 待查齿</h2>
+            <span>同一原片、同一环带；扇段为选角 ± 半个手填齿距，角偏不得超过 1/4 齿距，不缩放半径或原片</span>
+          </div>
+        </div>
+        <div class="compare-body">
+          <div class="compare-actions">
+            <button id="remember-reference" type="button">先记完好齿</button>
+            <button id="remember-suspect" class="primary" type="button">再记待查齿并试算</button>
+          </div>
+          <div class="form-grid compare-grid">
+            <label>完好齿选角 °<input id="reference-angle" type="number" step="any" min="0" max="360" placeholder="选方向后记录"></label>
+            <label>待查齿选角 °<input id="suspect-angle" type="number" step="any" min="0" max="360" placeholder="再用选方向点选"></label>
+            <label>采用角偏 °<input id="offset-angle" type="number" step="0.001" placeholder="试算后填入"></label>
+            <label>对照角（相对选角）°<input id="comparison-angle" type="number" step="any" placeholder="例如 -3、0、4"></label>
+          </div>
+          <form id="comparison-form" class="compare-actions">
+            <button id="run-compare" type="button">重新对齐试算</button>
+            <button id="apply-compare" class="primary" type="submit">采用角偏并核查对照角</button>
+          </form>
+          <dl class="compare-metrics">
+            <div><dt>采用的角偏</dt><dd id="adopted-offset">尚未采用</dd></div>
+            <div><dt>待查齿少掉的最大径向像素量</dt><dd id="adopted-loss">—</dd></div>
+            <div><dt>哪侧差得最多</dt><dd id="adopted-side">采用后显示左 / 右侧与角度</dd></div>
+          </dl>
+          <p id="compare-badge" class="compare-badge" role="status">同一偏移下，缺实拍边的角度会留空，不计少料。</p>
+          <div id="comparison-detail" class="comparison-detail">采用角偏后，可点选下表中的对照角；这里会列出两边各自的实际源角、源像素和半径。</div>
+          <div class="compare-table-wrap">
+            <table id="compare-table">
+              <thead><tr><th>对照角</th><th>完好齿实拍边</th><th>待查齿实拍边</th><th>完好半径 − 待查半径</th></tr></thead>
+              <tbody><tr><td colspan="4" class="compare-empty">尚未试算。</td></tr></tbody>
+            </table>
+          </div>
+          <div class="compare-links">
+            <a id="compare-proof" download="tooth-compare-proof.png" hidden>双齿 PNG 校样 ↓</a>
+            <a id="compare-csv" download="tooth-comparison.csv" hidden>对照 CSV ↓</a>
+          </div>
+        </div>
+      </section>
     </div>
     <aside class="right">
       <section class="panel readout">
         <div class="panel-head"><h2>当前齿缘半径</h2><span id="measurement-state"></span></div>
         <div class="volume"><strong id="edge-radius">—</strong><span id="radius-detail"></span></div>
         <p id="selected-level"></p>
+        <p id="readout-compare" class="readout-compare" hidden></p>
       </section>
       <form id="calibration" class="panel settings">
         <div class="panel-head"><div><h2>齿盘标定</h2><span>向右为 0°，从上方看画面顺时针增加</span></div></div>
@@ -86,7 +128,7 @@
       </form>
       <section class="panel outputs">
         <div class="panel-head"><h2>齿缘交接</h2></div>
-        <div><a id="proof" download>PNG 校样 ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 核查卡 ↓</a></div>
+        <div><a id="proof" download>PNG 校样 ↓</a><a id="single-proof" download>单角 PNG ↓</a><a id="csv" download>CSV 读数 ↓</a><a id="zip" download>ZIP 核查卡 ↓</a></div>
         <button id="prepare" type="button">将原片送入照片准备 ↗</button>
       </section>
     </aside>

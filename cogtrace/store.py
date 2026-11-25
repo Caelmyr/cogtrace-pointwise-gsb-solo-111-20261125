@@ -68,8 +68,13 @@ class Cards:
             card = self.read(key, integer(value.get("revision"), "工作版本", 1))
             incoming = object_value(value.get("settings", {}), "齿缘设置")
             config = rim.settings({**card["settings"], **incoming}, (card["width"], card["height"]))
-            card.update(name=text(value.get("name", card["name"]), "核查卡名称", 80, False),
-                        settings=config, revision=card["revision"] + 1)
+            updates = dict(
+                name=text(value.get("name", card["name"]), "核查卡名称", 80, False),
+                settings=config, revision=card["revision"] + 1,
+            )
+            if "comparison" in value:
+                updates["comparison"] = rim.comparison_state(value.get("comparison"), config)
+            card.update(updates)
             self.commit(self.folder(key), card)
             return card
 
